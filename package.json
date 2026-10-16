@@ -1,0 +1,35 @@
+{
+  "name": "@powly/sdk",
+  "version": "0.4.1",
+  "private": true,
+  "type": "module",
+  "description": "Powly game SDK: launch handshake, session tokens and platform services.",
+  "license": "MIT",
+  "homepage": "https://powly.gg",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fiioonnn/powly-sdk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/fiioonnn/powly-sdk/issues"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/powly.d.ts",
+      "default": "./dist/powly.mjs"
+    },
+    "./powly.js": "./dist/powly.js",
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node scripts/bundle.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.3",
+    "typescript": "6.0.3"
+  }
+}

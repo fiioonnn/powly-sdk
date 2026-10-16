@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+    <title>Starfall</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <canvas id="game" aria-label="Starfall"></canvas>
+    <div class="hud">
+      <span id="score">0</span>
+      <span id="lives" role="img" aria-label="Lives"></span>
+      <span class="spacer"></span>
+      <button id="sound" type="button" aria-label="Sound">♪</button>
+      <button id="fullscreen" type="button" aria-label="Fullscreen">⛶</button>
+    </div>
+    <section id="screen" class="screen" aria-live="polite"></section>
+    <!-- Relative paths: Powly serves the build from its own folder. -->
+    <script src="powly.js"></script>
+    <script src="game.js"></script>
+  </body>
+</html>

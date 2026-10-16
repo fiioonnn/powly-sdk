@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Powly Playground</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="top">
+        <div class="brand">
+          <span class="logo" aria-hidden="true">◆</span>
+          <span>Playground</span>
+        </div>
+        <div id="who" class="who">
+          <span class="dot"></span>
+          <span id="who-text">Connecting to Powly…</span>
+        </div>
+        <div class="top-actions">
+          <button type="button" class="ghost" data-action="fullscreen">Fullscreen</button>
+          <button type="button" class="ghost" data-action="purchase">Purchase dialog</button>
+        </div>
+      </header>
+
+      <nav class="tabs" aria-label="Sections">
+        <button type="button" data-tab="player" aria-current="page">Player</button>
+        <button type="button" data-tab="friends">Friends</button>
+        <button type="button" data-tab="rooms">Rooms <span id="rooms-badge" class="badge"></span></button>
+        <button type="button" data-tab="settings">Settings</button>
+        <button type="button" data-tab="saves">Saves</button>
+        <button type="button" data-tab="leaderboards">Leaderboards</button>
+        <button type="button" data-tab="achievements">
+          Achievements <span id="achievements-badge" class="badge"></span>
+        </button>
+        <button type="button" data-tab="backend">Backend</button>
+      </nav>
+
+      <main class="main">
+        <!-- Player -->
+        <section data-panel="player">
+          <div class="profile">
+            <div id="avatar" class="avatar"></div>
+            <div>
+              <h1 id="username">…</h1>
+              <p id="player-id" class="mono muted"></p>
+            </div>
+          </div>
+          <dl id="session" class="facts"></dl>
+          <div class="actions">
+            <button type="button" data-action="token">getSessionToken()</button>
+            <button type="button" data-action="me">api("/me")</button>
+            <button type="button" data-action="ownership">ownership.get()</button>
+            <button type="button" data-action="avatar">fetch(avatarUrl)</button>
+          </div>
+          <pre id="claims" class="code" hidden></pre>
+        </section>
+
+        <!-- Friends -->
+        <section data-panel="friends" hidden>
+          <p class="intro">Friends who play this game, invites, and what friends see you doing.</p>
+          <div class="actions">
+            <button type="button" data-action="friends">friends.list()</button>
+            <button type="button" data-action="invites">invites.list()</button>
+          </div>
+          <ul id="friends" class="list">
+            <li class="empty">Load your friends with friends.list().</li>
+          </ul>
+          <label class="field">
+            <span>Invite params (JSON)</span>
+            <input id="invite-params" value='{"lobby":"k3x9"}' spellcheck="false" />
+          </label>
+
+          <h2>Invites for you</h2>
+          <ul id="invites" class="list">
+            <li class="empty">Invites arrive here live while you play (invites.on("received")).</li>
+          </ul>
+
+          <h2>Presence</h2>
+          <div class="inline">
+            <input id="presence" aria-label="Presence text" value="Testing the SDK" />
+            <button type="button" data-action="presence">presence.set(text)</button>
+            <button type="button" class="ghost" data-action="presence-clear">set(null)</button>
+          </div>
+        </section>
+
+        <!-- Rooms -->
+        <section data-panel="rooms" hidden>
+          <div id="room-lobby">
+            <p class="intro">
+              Realtime parties. Create a room and share its code, or open the Playground with a
+              second account to try it with two players.
+            </p>
+            <div class="cards">
+              <div class="card">
+                <h2>Create a room</h2>
+                <div class="inline">
+                  <label class="field small">
+                    <span>Players</span>
+                    <input id="room-size" type="number" min="2" max="16" value="4" />
+                  </label>
+                  <label class="check">
+                    <input id="room-listed" type="checkbox" /> Listed
+                  </label>
+                </div>
+                <button type="button" class="primary" data-action="room-create">rooms.create()</button>
+              </div>
+              <div class="card">
+                <h2>Join with a code</h2>
+                <input id="room-code" class="code-input" placeholder="K7QF2M" maxlength="8" spellcheck="false" />
+                <button type="button" class="primary" data-action="room-join">rooms.join(code)</button>
+              </div>
+            </div>
+            <div class="row-head">
+              <h2>Listed rooms</h2>
+              <button type="button" class="ghost" data-action="room-list">rooms.list()</button>
+            </div>
+            <ul id="room-list" class="list">
+              <li class="empty">Refresh to see rooms anyone in this game can join.</li>
+            </ul>
+          </div>
+
+          <div id="room-current" hidden>
+            <div class="room-head">
+              <div>
+                <span class="muted">Room code</span>
+                <div id="room-code-big" class="room-code"></div>
+              </div>
+              <div id="room-chips" class="chips"></div>
+              <button type="button" class="danger" data-action="room-leave">Leave</button>
+            </div>
+            <div class="room-grid">
+              <div>
+                <h2>Players</h2>
+                <ul id="room-members" class="list"></ul>
+                <div class="inline">
+                  <button type="button" data-action="room-ready">Toggle ready</button>
+                  <button type="button" data-action="room-invite-friends">Invite a friend…</button>
+                </div>
+                <div id="host-tools" class="host-tools">
+                  <h2>Host</h2>
+                  <div class="inline">
+                    <input id="room-state" aria-label="Room data (JSON)" value='{"map":"dunes"}' spellcheck="false" />
+                    <button type="button" data-action="room-update-data">update({ data })</button>
+                  </div>
+                  <div class="inline">
+                    <button type="button" data-action="room-lock">Lock / unlock</button>
+                    <button type="button" data-action="room-listed">List / unlist</button>
+                  </div>
+                </div>
+              </div>
+              <div class="feed-box">
+                <h2>Activity</h2>
+                <ul id="room-feed" class="feed"></ul>
+                <form id="room-composer" class="composer">
+                  <input id="room-event" aria-label="Event" value="chat" spellcheck="false" />
+                  <input id="room-data" aria-label="Message (JSON or text)" placeholder="Say something" />
+                  <button type="submit" class="primary">Send</button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Settings -->
+        <section data-panel="settings" hidden>
+          <p class="intro">
+            Preferences are saves too, created in Studio → Saves: everything the player has
+            saved (<code>saves.all()</code>). <code>cheats</code> can only be changed by the
+            backend.
+          </p>
+          <div id="settings" class="settings">
+            <p class="empty">Loading…</p>
+          </div>
+          <div class="actions">
+            <button type="button" class="ghost" data-action="setting-all">saves.all()</button>
+          </div>
+        </section>
+
+        <!-- Saves -->
+        <section data-panel="saves" hidden>
+          <p class="intro">
+            Progress under keys created in Studio → Saves, each with a type (number, text,
+            object…): other values answer 422. <code>coins</code> is backend only; keys Studio didn’t create answer 404.
+          </p>
+          <div class="chips" id="save-keys">
+            <button type="button" class="chip" data-save-key="progress">progress</button>
+            <button type="button" class="chip" data-save-key="coins">coins</button>
+            <button type="button" class="chip" data-save-key="invented">invented</button>
+          </div>
+          <label class="field">
+            <span>Key</span>
+            <input id="save-key" value="progress" spellcheck="false" />
+          </label>
+          <label class="field">
+            <span>Value (JSON)</span>
+            <textarea id="save-value" rows="4" spellcheck="false">{"level": 3, "unlocked": ["forest", "caves"]}</textarea>
+          </label>
+          <div class="actions">
+            <button type="button" data-action="save-get">get</button>
+            <button type="button" class="primary" data-action="save-set">set</button>
+            <button type="button" data-action="save-delete">delete</button>
+            <button type="button" class="ghost" data-action="save-list">list()</button>
+          </div>
+        </section>
+
+        <!-- Leaderboards -->
+        <section data-panel="leaderboards" hidden>
+          <div class="segmented" id="boards">
+            <button type="button" data-board="score" aria-pressed="true">Score</button>
+            <button type="button" data-board="fastest" aria-pressed="false">Fastest time</button>
+          </div>
+          <p id="board-hint" class="intro">Higher is better.</p>
+          <div class="inline">
+            <input id="score" type="number" value="1200" aria-label="Score" />
+            <button type="button" class="primary" data-action="submit">submit(score)</button>
+          </div>
+          <ol id="leaderboard" class="board"></ol>
+        </section>
+
+        <!-- Achievements -->
+        <section data-panel="achievements" hidden>
+          <p class="intro">Unlocked from the browser; <code>backend-only</code> answers 403 here.</p>
+          <ul id="achievements" class="achievements"></ul>
+        </section>
+
+        <!-- Backend -->
+        <section data-panel="backend" hidden>
+          <p class="intro">
+            These need your game’s secret key, so they run on a server, never in the browser. Set
+            <code>CLIENT_ID</code> and <code>SECRET_KEY</code> from Studio → Configuration, and
+            <code>ACCESS_TOKEN</code> from the first command.
+          </p>
+          <div id="backend" class="snippets"></div>
+        </section>
+      </main>
+
+      <aside class="log-panel">
+        <div class="log-head">
+          <h2>Log <span id="log-count" class="muted"></span></h2>
+          <button type="button" class="ghost" data-action="clear-log">Clear</button>
+        </div>
+        <ol id="log" class="log"></ol>
+      </aside>
+    </div>
+
+    <dialog id="pick-friend" class="dialog">
+      <form method="dialog">
+        <h2>Invite a friend to this room</h2>
+        <ul id="pick-friend-list" class="list"></ul>
+        <div class="actions end">
+          <button type="submit" value="cancel" class="ghost">Close</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="powly.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
