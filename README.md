@@ -10,7 +10,7 @@ invites, multiplayer rooms, Twitch chat).
 npm install @powly/sdk
 ```
 
-Starting a new game? `npm create powly-game@latest my-game` sets up a React + Vite project with
+Starting a new game? `npm create powly@latest my-game` sets up a React + Vite project with
 the SDK.
 
 ## Use
