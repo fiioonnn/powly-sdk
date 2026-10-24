@@ -8,6 +8,8 @@ import {
   type HostMethod,
   type InitMessage,
   type InvitesOpenResult,
+  isOptionsButtonCorner,
+  type OptionsButtonCorner,
   type PlayerProfile,
   PROTOCOL,
   PROTOCOL_VERSION,
@@ -60,6 +62,12 @@ export type InitOptions = {
   powlyOrigin?: string | string[];
   /** How long to wait for Powly to answer (ms). Default 10 s. */
   timeoutMs?: number;
+  /**
+   * Which corner Powly's options button (its mascot, which opens the player's options) starts in:
+   * "top-left" (the default), "top-right", "bottom-left" or "bottom-right". Pick the one your own
+   * UI leaves free. Players can still move it, and their choice wins.
+   */
+  optionsButton?: OptionsButtonCorner;
 };
 
 export type LeaderboardEntry = { rank: number; playerId: string; username: string; score: number };
@@ -164,6 +172,11 @@ export type PowlySession = {
   /** Asks Powly to open its own purchase dialog (drawn by Powly, outside the game). */
   purchases: { open(): Promise<void> };
   fullscreen: { toggle(): Promise<void> };
+  /**
+   * Closes the game, like the exit button in Powly's options bar: the player goes back to the
+   * game's store page and the launch ends ("ended" fires). Save the player's progress first.
+   */
+  quit(): Promise<void>;
   /** Powly UI opened over the game ("pause"), closed ("resume"), or the launch ended ("ended"). */
   on(event: HostEventName, listener: () => void): () => void;
 };
@@ -206,6 +219,9 @@ export function init(options: InitOptions = {}): Promise<PowlySession> {
         type: "init",
         sdkVersion: SDK_VERSION,
         pac: 1,
+        ...(isOptionsButtonCorner(options.optionsButton) && {
+          optionsButton: options.optionsButton,
+        }),
       };
       channel.port1.onmessage = (event: MessageEvent<HostMessage>) => {
         const data = event.data;
@@ -398,6 +414,9 @@ function createSession(port: MessagePort, ready: ReadyMessage): PowlySession {
       toggle: async () => {
         await call("fullscreen.toggle");
       },
+    },
+    quit: async () => {
+      await call("quit");
     },
     on(event, listener) {
       const set = listeners.get(event) ?? new Set();

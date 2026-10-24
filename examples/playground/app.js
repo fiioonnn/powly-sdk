@@ -708,6 +708,7 @@
 
     fullscreen: () => run("fullscreen.toggle()", () => powly.fullscreen.toggle().then(() => "ok")),
     purchase: () => run("purchases.open()", () => powly.purchases.open().then(() => "opened")),
+    quit: () => run("quit()", () => powly.quit().then(() => "closing")),
     "clear-log": () => {
       entries = 0;
       $("log-count").textContent = "";

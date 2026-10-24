@@ -1,5 +1,5 @@
 // Turns the ESM build (tsc, dist/*.js) into the single files games download from Powly Studio
-// (Studio → Help center → Get started), served by apps/web/app/api/sdk/[file]/route.ts:
+// (Docs → Get started), served by apps/web/app/api/sdk/[file]/route.ts:
 //
 //   dist/powly.js           a classic script for games without a bundler: <script src="powly.js">
 //                           defines `window.Powly`, and nothing else reaches the global scope
@@ -53,6 +53,18 @@ const modules = [
   "twitch",
   "index",
 ];
+// Each module's imports have to be listed before it. One left out would leave its names
+// undefined in powly.js, which only fails once a game calls them (a missing twitch once left
+// every game stuck connecting), so the build stops instead.
+for (const [i, name] of modules.entries()) {
+  const source = readFileSync(resolve(root, "src", `${name}.ts`), "utf8");
+  for (const [, needed] of source.matchAll(/from\s+["']\.\/([\w-]+)\.ts["']/g)) {
+    const at = needed === undefined ? -1 : modules.indexOf(needed);
+    if (at === -1 || at > i) {
+      throw new Error(`scripts/bundle.ts: ${name} imports ${needed}, which isn't listed before it`);
+    }
+  }
+}
 
 /** A module without its imports and `export` keywords (declarations stay, names unchanged). */
 const strip = (file: string) =>

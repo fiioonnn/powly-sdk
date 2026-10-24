@@ -10,6 +10,17 @@
 export const PROTOCOL = "powly-sdk";
 export const PROTOCOL_VERSION = 1;
 
+/** The corners Powly's options button (its mascot, which opens the player's options) can be in. */
+export const OPTIONS_BUTTON_CORNERS = [
+  "top-left",
+  "top-right",
+  "bottom-left",
+  "bottom-right",
+] as const;
+export type OptionsButtonCorner = (typeof OPTIONS_BUTTON_CORNERS)[number];
+export const isOptionsButtonCorner = (value: unknown): value is OptionsButtonCorner =>
+  (OPTIONS_BUTTON_CORNERS as readonly unknown[]).includes(value);
+
 export type InitMessage = {
   protocol: typeof PROTOCOL;
   version: number;
@@ -20,6 +31,11 @@ export type InitMessage = {
    * SDKs leave it out.
    */
   pac?: 1;
+  /**
+   * Where the game wants Powly's options button to start (`Powly.init({ optionsButton })`); the
+   * player's own choice wins. Left out: Powly's default (top left).
+   */
+  optionsButton?: OptionsButtonCorner;
 };
 
 export type PlayerProfile = {
@@ -54,7 +70,8 @@ export type HostMethod =
   | "getSessionToken"
   | "purchases.open"
   | "fullscreen.toggle"
-  | "invites.open";
+  | "invites.open"
+  | "quit";
 
 export type RequestMessage = {
   type: "request";
@@ -94,6 +111,6 @@ export const isRequestMessage = (data: unknown): data is RequestMessage =>
   data !== null &&
   (data as RequestMessage).type === "request" &&
   Number.isInteger((data as RequestMessage).id) &&
-  ["getSessionToken", "purchases.open", "fullscreen.toggle", "invites.open"].includes(
+  ["getSessionToken", "purchases.open", "fullscreen.toggle", "invites.open", "quit"].includes(
     (data as RequestMessage).method,
   );

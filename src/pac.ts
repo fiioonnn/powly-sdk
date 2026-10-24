@@ -3,8 +3,9 @@
 // the server's to catch speed hacks), browser functions that were replaced (speed hack scripts and
 // extensions patch timers), traces of automated browsers, and how input arrives (scripted events,
 // clicks without pointer movement as AI agents make them, machine-regular timing as macros and
-// auto-clickers make them). Nothing is sent anywhere else, and nothing here reads what the player
-// types: only event counts and timings.
+// auto-clickers make them), and whether the player plays at all (any trusted input, gamepads
+// included: Powly closes games nobody plays). Nothing is sent anywhere else, and nothing here
+// reads what the player types: only event counts and timings.
 //
 // In real players' runs (not developer mode) the SDK also guards the game's code against being
 // copied (`guard`): the browser's context menu and its view-source, save-page and developer-tools
@@ -38,8 +39,13 @@ export type PacSample = {
     keyIntervalSd: number | null;
     clickIntervals: number;
     clickIntervalSd: number | null;
+    /** Every trusted interaction: key presses, clicks, taps, pointer movement, wheel, gamepads. */
+    activity: number;
   };
 };
+
+/** A gamepad axis past this counts as input (sticks rest a little off centre). */
+const GAMEPAD_DEADZONE = 0.3;
 
 export const isPacSample = (data: unknown): data is PacSample =>
   typeof data === "object" &&
@@ -193,6 +199,7 @@ export function startPacSensor(
     synthetic: 0,
     clicks: 0,
     teleportClicks: 0,
+    activity: 0,
   };
   const keyTimes: number[] = [];
   const clickTimes: number[] = [];
@@ -210,6 +217,8 @@ export function startPacSensor(
       if (counted) input.synthetic += 1;
       return;
     }
+    input.activity += 1;
+    if (event.type === "wheel") return;
     if (event.type === "pointermove" || event.type === "pointerover") {
       const move = event as PointerEvent;
       pointer = { x: move.clientX, y: move.clientY };
@@ -233,7 +242,27 @@ export function startPacSensor(
     pointer = { x: down.clientX, y: down.clientY };
   };
 
-  const types = ["keydown", "pointerdown", "pointermove", "pointerover"];
+  const types = ["keydown", "pointerdown", "pointermove", "pointerover", "wheel"];
+
+  // Gamepads send no events: a pressed button or a pushed stick, looked at a few times a second.
+  const watchGamepads = () => {
+    let pads: (Gamepad | null)[];
+    try {
+      pads = [...(win.navigator.getGamepads?.() ?? [])];
+    } catch {
+      return;
+    }
+    for (const pad of pads) {
+      if (!pad?.connected) continue;
+      if (
+        pad.buttons.some((button) => button.pressed) ||
+        pad.axes.some((axis) => Math.abs(axis) > GAMEPAD_DEADZONE)
+      ) {
+        input.activity += 1;
+        return;
+      }
+    }
+  };
   for (const type of types) {
     win.addEventListener(type, onInput, { capture: true, passive: true });
   }
@@ -300,6 +329,7 @@ export function startPacSensor(
     input.synthetic = 0;
     input.clicks = 0;
     input.teleportClicks = 0;
+    input.activity = 0;
     dateJump = 0;
     devtools = false;
   };
@@ -309,12 +339,14 @@ export function startPacSensor(
   const clearInterval = win.clearInterval.bind(win);
   const dateTimer = setInterval(watchDate, 1000);
   const reportTimer = setInterval(report, PAC_SAMPLE_MS);
+  const gamepadTimer = setInterval(watchGamepads, 250);
   const trapTimer = trap ? setInterval(springTrap, 1500) : undefined;
   report();
 
   return () => {
     clearInterval(dateTimer);
     clearInterval(reportTimer);
+    clearInterval(gamepadTimer);
     if (trapTimer !== undefined) clearInterval(trapTimer);
     for (const type of types) win.removeEventListener(type, onInput, { capture: true });
     win.removeEventListener("keydown", onGuardKey, { capture: true });
