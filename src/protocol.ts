@@ -93,7 +93,11 @@ export type ResponseMessage =
   | { type: "response"; id: number; ok: true; result: unknown }
   | { type: "response"; id: number; ok: false; error: string };
 
-export type HostEventName = "pause" | "resume" | "ended";
+/**
+ * "shown": Powly's loading screen is gone and the game is on screen (once per launch). "pause" /
+ * "resume": Powly UI covers the game or the tab is hidden, and back. "ended": the launch ended.
+ */
+export type HostEventName = "shown" | "pause" | "resume" | "ended";
 
 export type EventMessage = { type: "event"; event: HostEventName };
 

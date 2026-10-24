@@ -177,8 +177,15 @@ export type PowlySession = {
    * game's store page and the launch ends ("ended" fires). Save the player's progress first.
    */
   quit(): Promise<void>;
-  /** Powly UI opened over the game ("pause"), closed ("resume"), or the launch ended ("ended"). */
+  /**
+   * Powly's loading screen is gone and the game is on screen ("shown": start the intro or music
+   * here), Powly UI opened over the game ("pause"), closed ("resume"), or the launch ended
+   * ("ended"). "shown" comes once per launch; listening for it later calls the listener right
+   * away.
+   */
   on(event: HostEventName, listener: () => void): () => void;
+  /** Whether Powly's loading screen is gone and the game is on screen ("shown" came). */
+  readonly shown: boolean;
 };
 
 function expectedOrigins(options: InitOptions): string[] {
@@ -255,6 +262,8 @@ function createSession(port: MessagePort, ready: ReadyMessage): PowlySession {
     { resolve: (value: unknown) => void; reject: (error: Error) => void }
   >();
   const listeners = new Map<HostEventName, Set<() => void>>();
+  // "shown" comes once; games that listen for it later still hear it.
+  let shown = false;
 
   port.onmessage = (event: MessageEvent<HostMessage>) => {
     const data = event.data;
@@ -265,7 +274,12 @@ function createSession(port: MessagePort, ready: ReadyMessage): PowlySession {
       if (data.ok) waiting.resolve(data.result);
       else waiting.reject(new PowlyError(data.error));
     } else if (data?.type === "event") {
-      for (const listener of listeners.get((data as EventMessage).event) ?? []) listener();
+      const name = (data as EventMessage).event;
+      if (name === "shown") {
+        if (shown) return;
+        shown = true;
+      }
+      for (const listener of listeners.get(name) ?? []) listener();
     }
   };
 
@@ -422,7 +436,15 @@ function createSession(port: MessagePort, ready: ReadyMessage): PowlySession {
       const set = listeners.get(event) ?? new Set();
       set.add(listener);
       listeners.set(event, set);
+      if (event === "shown" && shown) {
+        queueMicrotask(() => {
+          if (set.has(listener)) listener();
+        });
+      }
       return () => set.delete(listener);
+    },
+    get shown() {
+      return shown;
     },
   };
 }

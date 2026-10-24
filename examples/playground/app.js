@@ -757,7 +757,7 @@
       showPlayer();
       renderBackend();
 
-      for (const event of ["pause", "resume", "ended"]) {
+      for (const event of ["shown", "pause", "resume", "ended"]) {
         powly.on(event, () => log("event", `powly.on("${event}")`));
       }
       powly.rooms.on("status", (status) => {
