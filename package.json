@@ -1,6 +1,6 @@
 {
   "name": "@powly/sdk",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "private": true,
   "type": "module",
   "description": "Powly game SDK: launch handshake, session tokens and platform services.",

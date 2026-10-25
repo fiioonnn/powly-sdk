@@ -651,6 +651,9 @@
         return powly.audio.channels;
       }),
     "audio-open": () => run("audio.open()", () => powly.audio.open()),
+    // Content: make a collection "words" in Studio → Content first.
+    "content-random": () =>
+      run('content.random("words", 3)', () => powly.content.random("words", 3)),
     "audio-set": () =>
       run("audio.set({ music: 0.3 })", async () => {
         await powly.audio.set({ channels: { music: { volume: 0.3 } } });

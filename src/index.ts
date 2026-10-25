@@ -108,6 +108,8 @@ export type Achievement = {
   unlockedAt: string | null;
 };
 export type Ownership = { owned: boolean; since: string | null; addOns: string[] };
+/** An entry of a content collection (Studio → Content): its fields' values and tags. */
+export type ContentEntry<T = Record<string, unknown>> = { id: string; data: T; tags: string[] };
 export type Invite = {
   id: string;
   from: Friend;
@@ -203,6 +205,35 @@ export type PowlySession = {
     all(): Promise<Record<string, unknown>>;
     set(key: string, value: unknown): Promise<void>;
     reset(key: string): Promise<void>;
+  };
+  /**
+   * The game's content (Studio → Content): collections of entries every player shares, like quiz
+   * questions or words to draw. Private fields (a quiz's answers) never reach the browser: check a
+   * guess with `check`, which only answers whether it's right. Read-only here; the studio and the
+   * game's backend (secret key) change them.
+   */
+  content: {
+    /** A page of entries, oldest first (1–100, default 50); `next` continues it. */
+    list<T = Record<string, unknown>>(
+      collection: string,
+      options?: { limit?: number; cursor?: string | null; tags?: string[] },
+    ): Promise<{ entries: ContentEntry<T>[]; next: string | null }>;
+    /** Up to `count` different entries picked at random on the server (1–50, default 1). */
+    random<T = Record<string, unknown>>(
+      collection: string,
+      count?: number,
+      options?: { tags?: string[] },
+    ): Promise<ContentEntry<T>[]>;
+    /** One entry, or null. */
+    get<T = Record<string, unknown>>(
+      collection: string,
+      id: string,
+    ): Promise<ContentEntry<T> | null>;
+    /**
+     * Whether `value` matches the entry's `field` (text ignoring case and extra spaces; a list when
+     * any item matches), without sending the field to the browser. Up to 60 a minute.
+     */
+    check(collection: string, id: string, field: string, value: unknown): Promise<boolean>;
   };
   /** Whether the player owns the game (scope ownership.read). */
   ownership: { get(): Promise<Ownership> };
@@ -602,6 +633,41 @@ function createSession(
       unlock: (key) => api("/achievements", { method: "POST", body: { key } }),
     },
     settings: { get: saves.get, all: saves.all, set: saves.set, reset: saves.delete },
+    content: {
+      list: async (collection, options = {}) => {
+        const query = new URLSearchParams();
+        if (options.limit !== undefined) query.set("limit", String(options.limit));
+        if (options.cursor) query.set("cursor", options.cursor);
+        if (options.tags?.length) query.set("tags", options.tags.join(","));
+        return api(`/content/${path(collection)}${query.size ? `?${query}` : ""}`);
+      },
+      random: async (collection, count = 1, options = {}) => {
+        const query = new URLSearchParams({ count: String(count) });
+        if (options.tags?.length) query.set("tags", options.tags.join(","));
+        return (
+          await api<{ entries: ContentEntry<never>[] }>(
+            `/content/${path(collection)}/random?${query}`,
+          )
+        ).entries;
+      },
+      get: async (collection, id) => {
+        try {
+          return await api(`/content/${path(collection)}/${path(id)}`);
+        } catch (error) {
+          if (error instanceof PowlyError && error.status === 404 && /entry/.test(error.message)) {
+            return null;
+          }
+          throw error;
+        }
+      },
+      check: async (collection, id, field, value) =>
+        (
+          await api<{ correct: boolean }>(`/content/${path(collection)}/${path(id)}/check`, {
+            method: "POST",
+            body: { field, value },
+          })
+        ).correct,
+    },
     ownership: { get: () => api<Ownership>("/ownership") },
     purchases: {
       open: async () => {
