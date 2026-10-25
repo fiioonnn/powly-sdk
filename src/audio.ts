@@ -55,6 +55,11 @@ export type AudioApi = {
    * channels are ignored.
    */
   set(changes: AudioChanges): Promise<void>;
+  /**
+   * Opens Powly's sound menu over the game (in its options bar), e.g. from a Sound button in
+   * the game's own menu. Resolves when the player closes it; "change" tells what they set.
+   */
+  open(): Promise<void>;
   /** The settings changed (in Powly's sound menu, or with `set`). */
   on(event: "change", listener: (audio: AudioState) => void): () => void;
 };

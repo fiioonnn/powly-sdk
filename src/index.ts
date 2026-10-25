@@ -537,6 +537,9 @@ function createSession(
         const result = await call("audio.set", { audio: changes });
         setAudio(audioStateOf(result, channels));
       },
+      async open() {
+        await call("audio.open");
+      },
       on(_event, listener) {
         audioListeners.add(listener);
         return () => audioListeners.delete(listener);

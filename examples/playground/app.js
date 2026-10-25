@@ -650,6 +650,7 @@
         await powly.audio.register({ id: "drawing", label: "Drawing sounds", volume: false });
         return powly.audio.channels;
       }),
+    "audio-open": () => run("audio.open()", () => powly.audio.open()),
     "audio-set": () =>
       run("audio.set({ music: 0.3 })", async () => {
         await powly.audio.set({ channels: { music: { volume: 0.3 } } });

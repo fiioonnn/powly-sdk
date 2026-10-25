@@ -137,6 +137,7 @@ export const HOST_METHODS = [
   "twitch.connect",
   "audio.set",
   "audio.channels",
+  "audio.open",
   "quit",
 ] as const;
 export type HostMethod = (typeof HOST_METHODS)[number];
