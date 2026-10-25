@@ -3,6 +3,7 @@ import { PowlyError } from "./errors.ts";
 import { POWLY_ORIGINS } from "./origins.ts";
 import { startPacSensor } from "./pac.ts";
 import {
+  type AudioChanges,
   type AudioChannel,
   type AudioState,
   audioChannelsOf,
@@ -316,6 +317,25 @@ function audioStateOf(value: unknown, channels: AudioChannel[]): AudioState {
   };
 }
 
+/** The settings with a game's changes in (known channels only), as Powly will answer them. */
+function withChanges(state: AudioState, changes: AudioChanges): AudioState {
+  const level = (value: unknown, fallback: number) => volumeOf(value) ?? fallback;
+  const next: AudioState = {
+    volume: level(changes?.volume, state.volume),
+    muted: typeof changes?.muted === "boolean" ? changes.muted : state.muted,
+    channels: { ...state.channels },
+  };
+  for (const [id, patch] of Object.entries(changes?.channels ?? {})) {
+    const known = next.channels[id];
+    if (!known || typeof patch !== "object" || patch === null) continue;
+    next.channels[id] = {
+      volume: level(patch.volume, known.volume),
+      on: typeof patch.on === "boolean" ? patch.on : known.on,
+    };
+  }
+  return next;
+}
+
 function createSession(
   port: MessagePort,
   ready: ReadyMessage,
@@ -534,8 +554,19 @@ function createSession(
         setAudio(audioStateOf(result, channels));
       },
       async set(changes) {
-        const result = await call("audio.set", { audio: changes });
-        setAudio(audioStateOf(result, channels));
+        // At once, so the game's own controls don't jump back while Powly answers.
+        const before = audio;
+        const ask = call("audio.set", { audio: changes });
+        setAudio(withChanges(audio, changes));
+        let result: unknown;
+        try {
+          result = await ask;
+        } catch (error) {
+          setAudio(before);
+          throw error;
+        }
+        const confirmed = audioStateOf(result, channels);
+        if (JSON.stringify(confirmed) !== JSON.stringify(audio)) setAudio(confirmed);
       },
       async open() {
         await call("audio.open");
