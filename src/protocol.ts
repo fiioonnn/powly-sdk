@@ -21,6 +21,60 @@ export type OptionsButtonCorner = (typeof OPTIONS_BUTTON_CORNERS)[number];
 export const isOptionsButtonCorner = (value: unknown): value is OptionsButtonCorner =>
   (OPTIONS_BUTTON_CORNERS as readonly unknown[]).includes(value);
 
+/**
+ * A kind of sound the game has (music, drawing sounds…), which Powly's sound menu shows with a
+ * volume slider (`volume`, default true), an on/off switch (`toggle`, default true), or both.
+ */
+export type AudioChannel = { id: string; label: string; volume?: boolean; toggle?: boolean };
+
+/** One channel's setting: its volume, 0 to 1, and whether it's on. */
+export type ChannelState = { volume: number; on: boolean };
+
+/** Channel ids: letters, digits, _ and -, starting with a letter, up to 32. */
+export const AUDIO_CHANNEL_ID = /^[A-Za-z][A-Za-z0-9_-]{0,31}$/;
+export const MAX_AUDIO_CHANNELS = 8;
+export const MAX_AUDIO_LABEL = 32;
+
+/**
+ * The player's sound settings from Powly's sound menu. `volume` (0 to 1) is the player's overall
+ * volume, `channels` the game's own (by channel id); `muted` silences everything.
+ */
+export type AudioState = {
+  volume: number;
+  muted: boolean;
+  channels: Record<string, ChannelState>;
+};
+
+/** The channels a game sent, cleaned up: valid ids, short labels, no repeats, at most 8. */
+export function audioChannelsOf(value: unknown): AudioChannel[] {
+  if (!Array.isArray(value)) return [];
+  const channels: AudioChannel[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const { id, label, volume, toggle } = entry as Partial<AudioChannel>;
+    if (typeof id !== "string" || !AUDIO_CHANNEL_ID.test(id)) continue;
+    if (channels.some((channel) => channel.id === id)) continue;
+    const text = typeof label === "string" ? label.trim().slice(0, MAX_AUDIO_LABEL) : "";
+    const slider = volume !== false;
+    // Neither a slider nor a switch would show nothing: both, then.
+    const onOff = toggle !== false || !slider;
+    channels.push({ id, label: text || id, volume: slider, toggle: onOff });
+    if (channels.length === MAX_AUDIO_CHANNELS) break;
+  }
+  return channels;
+}
+
+/** What a game changes from its own sound menu; channels by id, only the fields given. */
+export type AudioChanges = {
+  volume?: number;
+  muted?: boolean;
+  channels?: Record<string, Partial<ChannelState>>;
+};
+
+/** A volume between 0 and 1, or null. */
+export const volumeOf = (value: unknown): number | null =>
+  typeof value === "number" && Number.isFinite(value) ? Math.min(Math.max(value, 0), 1) : null;
+
 export type InitMessage = {
   protocol: typeof PROTOCOL;
   version: number;
@@ -36,6 +90,11 @@ export type InitMessage = {
    * player's own choice wins. Left out: Powly's default (top left).
    */
   optionsButton?: OptionsButtonCorner;
+  /**
+   * The SDK follows Powly's sound menu (SDK 0.8.0 and later): `channels` are the game's own
+   * volume controls, shown as sliders. Older SDKs leave it out.
+   */
+  audio?: { channels: AudioChannel[] };
 };
 
 export type PlayerProfile = {
@@ -62,6 +121,8 @@ export type ReadyMessage = {
    * Missing from older Powly hosts: no guard.
    */
   pac?: { guard: boolean };
+  /** The player's sound settings when the game starts. Missing from older Powly hosts. */
+  audio?: AudioState;
 };
 
 export type FailedMessage = { type: "failed"; error: string };
@@ -74,6 +135,8 @@ export const HOST_METHODS = [
   "invites.open",
   "players.open",
   "twitch.connect",
+  "audio.set",
+  "audio.channels",
   "quit",
 ] as const;
 export type HostMethod = (typeof HOST_METHODS)[number];
@@ -97,6 +160,10 @@ export type RequestMessage = {
   playerId?: string;
   /** "players.open": open on the profile (the default) or straight on reporting them. */
   view?: PlayerView;
+  /** "audio.set": what the game's own sound menu changed. */
+  audio?: AudioChanges;
+  /** "audio.channels": every channel the game has now (registered later than init). */
+  channels?: AudioChannel[];
 };
 
 /** What "invites.open" answers once Powly's dialog closed: the friends the player invited. */
@@ -124,7 +191,10 @@ export type ResponseMessage =
  */
 export type HostEventName = "shown" | "pause" | "resume" | "ended";
 
-export type EventMessage = { type: "event"; event: HostEventName };
+export type EventMessage =
+  | { type: "event"; event: HostEventName }
+  /** The player changed the sound settings (Powly's sound menu, or its M key). */
+  | { type: "event"; event: "audio"; audio: AudioState };
 
 export type HostMessage = ReadyMessage | FailedMessage | ResponseMessage | EventMessage;
 

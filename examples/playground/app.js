@@ -644,6 +644,17 @@
       });
     },
     // A game's Twitch mode: Powly asks the player to connect Twitch when they haven't.
+    // Powly's sound menu: a channel registered after init, with only an on/off switch.
+    "audio-register": () =>
+      run('audio.register({ id: "drawing", volume: false })', async () => {
+        await powly.audio.register({ id: "drawing", label: "Drawing sounds", volume: false });
+        return powly.audio.channels;
+      }),
+    "audio-set": () =>
+      run("audio.set({ music: 0.3 })", async () => {
+        await powly.audio.set({ channels: { music: { volume: 0.3 } } });
+        return { music: powly.audio.level("music"), effects: powly.audio.level("effects") };
+      }),
     twitch: () =>
       run("twitch.connect({ prompt: true })", () => powly.twitch.connect({ prompt: true })),
     friends: loadFriends,
@@ -766,7 +777,15 @@
   });
 
   const started = performance.now();
-  window.Powly.init()
+  // Two kinds of sound for Powly's sound menu; "drawing" is registered later (a button).
+  window.Powly.init({
+    audio: {
+      channels: [
+        { id: "music", label: "Music" },
+        { id: "effects", label: "Sound effects" },
+      ],
+    },
+  })
     .then(async (session) => {
       powly = session;
       $("who").className = "who ok";
@@ -792,6 +811,7 @@
         }
       });
       powly.invites.on("received", showLiveInvite);
+      powly.audio.on("change", (audio) => log("event", 'powly.audio.on("change")', pretty(audio)));
 
       // A hidden achievement for the curious: a tiny button in the corner.
       document.body.append(

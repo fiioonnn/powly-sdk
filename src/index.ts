@@ -1,7 +1,12 @@
+import { type AudioApi, type AudioOptions, installMasterGain, masterLevel } from "./audio.ts";
 import { PowlyError } from "./errors.ts";
 import { POWLY_ORIGINS } from "./origins.ts";
 import { startPacSensor } from "./pac.ts";
 import {
+  type AudioChannel,
+  type AudioState,
+  audioChannelsOf,
+  type ChannelState,
   type EventMessage,
   type HostEventName,
   type HostMessage,
@@ -9,6 +14,7 @@ import {
   type InitMessage,
   type InvitesOpenResult,
   isOptionsButtonCorner,
+  MAX_AUDIO_CHANNELS,
   type OptionsButtonCorner,
   type PlayerProfile,
   type PlayersOpenResult,
@@ -18,6 +24,7 @@ import {
   type ReadyMessage,
   type RequestMessage,
   type TwitchConnectResult,
+  volumeOf,
 } from "./protocol.ts";
 import { createRooms, type RoomsApi } from "./rooms.ts";
 import {
@@ -41,6 +48,7 @@ import { SDK_VERSION } from "./version.ts";
 //   const room = await powly.rooms.create();    // realtime parties (src/rooms.ts)
 //   await powly.twitch.connect();                // the streamer's Twitch chat (src/twitch.ts)
 //   await powly.players.open(playerId);          // Powly's profile dialog: add, block, report
+//   powly.audio.level("music");                  // Powly's sound menu (src/audio.ts)
 //
 // Nothing here is a security boundary: the game runs in the player's browser. Your backend must
 // verify session tokens (JWKS) or exchange them, and Powly checks everything server-side.
@@ -73,6 +81,12 @@ export type InitOptions = {
    * UI leaves free. Players can still move it, and their choice wins.
    */
   optionsButton?: OptionsButtonCorner;
+  /**
+   * Powly's sound menu (src/audio.ts): the game's own volume `channels` (sliders next to the
+   * player's overall volume), and whether the SDK applies the overall volume and mute to the
+   * page's sound itself (`auto`, default true).
+   */
+  audio?: AudioOptions;
 };
 
 export type LeaderboardEntry = { rank: number; playerId: string; username: string; score: number };
@@ -140,6 +154,11 @@ export type PowlySession = {
   players: {
     open(playerId: string, options?: { view?: PlayerView }): Promise<PlayersOpenResult>;
   };
+  /**
+   * The player's sound settings from Powly's options bar: overall volume, mute and the game's
+   * channels (`Powly.init({ audio: { channels } })`). Play each channel at `level(channel)`.
+   */
+  audio: AudioApi;
   /** Realtime rooms (parties) with other players of this game. */
   rooms: RoomsApi;
   /**
@@ -234,6 +253,11 @@ export function init(options: InitOptions = {}): Promise<PowlySession> {
   if (origins.length === 0) {
     return Promise.reject(new PowlyError("This game only runs when launched from Powly."));
   }
+  const audioChannels = audioChannelsOf(options.audio?.channels ?? []);
+  // Before the game's engine makes a sound, so its connections go through the volume control.
+  const auto = options.audio?.auto !== false;
+  if (auto) masterGain ??= installMasterGain();
+  const master = auto ? masterGain : null;
   return new Promise((resolve, reject) => {
     const channels = origins.map((origin) => {
       const channel = new MessageChannel();
@@ -246,13 +270,14 @@ export function init(options: InitOptions = {}): Promise<PowlySession> {
         ...(isOptionsButtonCorner(options.optionsButton) && {
           optionsButton: options.optionsButton,
         }),
+        audio: { channels: audioChannels },
       };
       channel.port1.onmessage = (event: MessageEvent<HostMessage>) => {
         const data = event.data;
         if (data?.type === "ready") {
           clearTimeout(timer);
           for (const other of channels) if (other !== channel) other.port1.close();
-          resolve(createSession(channel.port1, data));
+          resolve(createSession(channel.port1, data, { channels: audioChannels, master }));
         } else if (data?.type === "failed") {
           clearTimeout(timer);
           reject(new PowlyError(data.error));
@@ -269,7 +294,33 @@ export function init(options: InitOptions = {}): Promise<PowlySession> {
   });
 }
 
-function createSession(port: MessagePort, ready: ReadyMessage): PowlySession {
+/** The page's volume control (src/audio.ts), put in once even if init runs again. */
+let masterGain: ReturnType<typeof installMasterGain> | null = null;
+
+/** The sound settings Powly sent, with every channel (on, at full volume, when it sent none). */
+function audioStateOf(value: unknown, channels: AudioChannel[]): AudioState {
+  const sent = (typeof value === "object" && value !== null ? value : {}) as Partial<AudioState>;
+  const levels = ((typeof sent.channels === "object" && sent.channels) || {}) as Record<
+    string,
+    Partial<ChannelState> | undefined
+  >;
+  return {
+    volume: volumeOf(sent.volume) ?? 1,
+    muted: sent.muted === true,
+    channels: Object.fromEntries(
+      channels.map((channel) => {
+        const level = levels[channel.id];
+        return [channel.id, { volume: volumeOf(level?.volume) ?? 1, on: level?.on !== false }];
+      }),
+    ),
+  };
+}
+
+function createSession(
+  port: MessagePort,
+  ready: ReadyMessage,
+  sound: { channels: AudioChannel[]; master: typeof masterGain },
+): PowlySession {
   let token = ready.token;
   let expiresAt = Date.now() + ready.expiresIn * 1000;
   let refreshing: Promise<string> | null = null;
@@ -282,6 +333,23 @@ function createSession(port: MessagePort, ready: ReadyMessage): PowlySession {
   // "shown" comes once; games that listen for it later still hear it.
   let shown = false;
 
+  // The player's sound settings; the page's volume follows them (auto).
+  let channels = sound.channels;
+  let audio = audioStateOf(ready.audio, channels);
+  const audioListeners = new Set<(audio: AudioState) => void>();
+  sound.master?.set(masterLevel(audio));
+  const setAudio = (next: AudioState) => {
+    audio = next;
+    sound.master?.set(masterLevel(audio));
+    for (const listener of audioListeners) {
+      try {
+        listener(audio);
+      } catch (error) {
+        console.error("[powly] an audio listener failed", error);
+      }
+    }
+  };
+
   port.onmessage = (event: MessageEvent<HostMessage>) => {
     const data = event.data;
     if (data?.type === "response") {
@@ -291,7 +359,12 @@ function createSession(port: MessagePort, ready: ReadyMessage): PowlySession {
       if (data.ok) waiting.resolve(data.result);
       else waiting.reject(new PowlyError(data.error));
     } else if (data?.type === "event") {
-      const name = (data as EventMessage).event;
+      const message = data as EventMessage;
+      if (message.event === "audio") {
+        if ("audio" in message) setAudio(audioStateOf(message.audio, channels));
+        return;
+      }
+      const name = message.event;
       if (name === "shown") {
         if (shown) return;
         shown = true;
@@ -302,7 +375,10 @@ function createSession(port: MessagePort, ready: ReadyMessage): PowlySession {
 
   const call = (
     method: HostMethod,
-    extra: Pick<RequestMessage, "params" | "members" | "playerId" | "view"> = {},
+    extra: Pick<
+      RequestMessage,
+      "params" | "members" | "playerId" | "view" | "audio" | "channels"
+    > = {},
   ) =>
     new Promise<unknown>((resolve, reject) => {
       const id = nextId++;
@@ -422,6 +498,50 @@ function createSession(port: MessagePort, ready: ReadyMessage): PowlySession {
           ...(options.view && { view: options.view }),
         })) as PlayersOpenResult,
     },
+    audio: {
+      get volume() {
+        return audio.volume;
+      },
+      get muted() {
+        return audio.muted;
+      },
+      get channels() {
+        return Object.fromEntries(
+          Object.entries(audio.channels).map(([id, state]) => [id, { ...state }]),
+        );
+      },
+      level(channel) {
+        const state = channel === undefined ? undefined : audio.channels[channel];
+        const own = state ? (state.on ? state.volume : 0) : 1;
+        return sound.master ? own : own * masterLevel(audio);
+      },
+      async register(channel) {
+        const next = audioChannelsOf([
+          ...channels.filter((existing) => existing.id !== channel?.id),
+          channel,
+        ]);
+        if (!next.some((entry) => entry.id === channel?.id)) {
+          throw new PowlyError(
+            `A channel needs an id of letters, digits, _ and -, and a game has up to ${MAX_AUDIO_CHANNELS}.`,
+          );
+        }
+        // Same order as before; a changed channel keeps its place.
+        channels = [
+          ...channels.map((existing) => next.find((entry) => entry.id === existing.id) ?? existing),
+          ...next.filter((entry) => !channels.some((existing) => existing.id === entry.id)),
+        ];
+        const result = await call("audio.channels", { channels });
+        setAudio(audioStateOf(result, channels));
+      },
+      async set(changes) {
+        const result = await call("audio.set", { audio: changes });
+        setAudio(audioStateOf(result, channels));
+      },
+      on(_event, listener) {
+        audioListeners.add(listener);
+        return () => audioListeners.delete(listener);
+      },
+    },
     rooms: realtime.rooms,
     twitch: {
       info: twitch.info,
@@ -482,6 +602,11 @@ function createSession(port: MessagePort, ready: ReadyMessage): PowlySession {
 const Powly = { init, SDK_VERSION, PowlyError };
 export default Powly;
 export type {
+  AudioApi,
+  AudioChannel,
+  AudioOptions,
+  AudioState,
+  ChannelState,
   ConnectOptions,
   HostEventName,
   PlayerProfile,

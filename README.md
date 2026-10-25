@@ -2,7 +2,7 @@
 
 The SDK for games on [Powly](https://powly.gg): the launch handshake with Powly, the player's
 profile, session tokens and the platform services (saves, leaderboards, achievements, friends,
-invites, multiplayer rooms, Twitch chat).
+invites, multiplayer rooms, Twitch chat, sound settings).
 
 ## Install
 
@@ -31,7 +31,7 @@ await powly.leaderboards.submit("high-score", 1200);
 Without a bundler, load the classic script instead; it defines `window.Powly`:
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/@powly/sdk@0.7.0/dist/powly.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@powly/sdk@0.8.0/dist/powly.js"></script>
 ```
 
 ## Testing
@@ -58,7 +58,7 @@ your backend verifies session tokens or exchanges them for an access token.
 ## This repository
 
 The SDK is developed in Powly's main repository and mirrored here with each release; this is
-`@powly/sdk` 0.7.0. Issues are welcome; changes land through the main repository.
+`@powly/sdk` 0.8.0. Issues are welcome; changes land through the main repository.
 
 To build it yourself (Node.js 24 or newer):
 

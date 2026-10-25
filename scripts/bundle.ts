@@ -51,6 +51,7 @@ const modules = [
   "realtime-protocol",
   "rooms",
   "twitch",
+  "audio",
   "index",
 ];
 // Each module's imports have to be listed before it. One left out would leave its names
