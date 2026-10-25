@@ -66,12 +66,21 @@ export type ReadyMessage = {
 
 export type FailedMessage = { type: "failed"; error: string };
 
-export type HostMethod =
-  | "getSessionToken"
-  | "purchases.open"
-  | "fullscreen.toggle"
-  | "invites.open"
-  | "quit";
+/** What a game may ask the Powly page for. */
+export const HOST_METHODS = [
+  "getSessionToken",
+  "purchases.open",
+  "fullscreen.toggle",
+  "invites.open",
+  "players.open",
+  "twitch.connect",
+  "quit",
+] as const;
+export type HostMethod = (typeof HOST_METHODS)[number];
+
+/** "players.open": what Powly's player dialog opens on. */
+export const PLAYER_VIEWS = ["profile", "report"] as const;
+export type PlayerView = (typeof PLAYER_VIEWS)[number];
 
 export type RequestMessage = {
   type: "request";
@@ -84,10 +93,26 @@ export type RequestMessage = {
    * dialog shows them as in the party, without an Invite button.
    */
   members?: string[];
+  /** "players.open": the player (their player ID in this game) to show. */
+  playerId?: string;
+  /** "players.open": open on the profile (the default) or straight on reporting them. */
+  view?: PlayerView;
 };
 
 /** What "invites.open" answers once Powly's dialog closed: the friends the player invited. */
 export type InvitesOpenResult = { invited: string[] };
+
+/**
+ * What "players.open" answers once Powly's player dialog closed: whether the player has that
+ * player blocked now (the game may hide their chat, say). Whether they reported them stays private.
+ */
+export type PlayersOpenResult = { blocked: boolean };
+
+/**
+ * What "twitch.connect" answers once Powly's Connect Twitch dialog closed: whether the player's
+ * Twitch is connected now (the SDK then reads GET /twitch again).
+ */
+export type TwitchConnectResult = { connected: boolean };
 
 export type ResponseMessage =
   | { type: "response"; id: number; ok: true; result: unknown }
@@ -110,11 +135,13 @@ export const isInitMessage = (data: unknown): data is InitMessage =>
   (data as InitMessage).type === "init" &&
   (data as InitMessage).version === PROTOCOL_VERSION;
 
-export const isRequestMessage = (data: unknown): data is RequestMessage =>
+/** A request with a method this Powly doesn't know (from a newer SDK): answered with an error. */
+export const isRequestShaped = (data: unknown): data is { type: "request"; id: number } =>
   typeof data === "object" &&
   data !== null &&
   (data as RequestMessage).type === "request" &&
-  Number.isInteger((data as RequestMessage).id) &&
-  ["getSessionToken", "purchases.open", "fullscreen.toggle", "invites.open", "quit"].includes(
-    (data as RequestMessage).method,
-  );
+  Number.isInteger((data as RequestMessage).id);
+
+export const isRequestMessage = (data: unknown): data is RequestMessage =>
+  isRequestShaped(data) &&
+  (HOST_METHODS as readonly unknown[]).includes((data as RequestMessage).method);

@@ -11,13 +11,17 @@ import {
   isOptionsButtonCorner,
   type OptionsButtonCorner,
   type PlayerProfile,
+  type PlayersOpenResult,
+  type PlayerView,
   PROTOCOL,
   PROTOCOL_VERSION,
   type ReadyMessage,
   type RequestMessage,
+  type TwitchConnectResult,
 } from "./protocol.ts";
 import { createRooms, type RoomsApi } from "./rooms.ts";
 import {
+  type ConnectOptions,
   createTwitch,
   type TwitchApi,
   type TwitchChatMessage,
@@ -36,6 +40,7 @@ import { SDK_VERSION } from "./version.ts";
 //   const token = await powly.getSessionToken(); // send it to your backend, which verifies it
 //   const room = await powly.rooms.create();    // realtime parties (src/rooms.ts)
 //   await powly.twitch.connect();                // the streamer's Twitch chat (src/twitch.ts)
+//   await powly.players.open(playerId);          // Powly's profile dialog: add, block, report
 //
 // Nothing here is a security boundary: the game runs in the player's browser. Your backend must
 // verify session tokens (JWKS) or exchange them, and Powly checks everything server-side.
@@ -122,6 +127,18 @@ export type PowlySession = {
      * the player IDs they invited. Needs the friends.read and invites.write scopes.
      */
     open(params?: Record<string, string>): Promise<{ invited: string[] }>;
+  };
+  /**
+   * Other players of this game, by their player ID (from rooms, leaderboards, friends…).
+   * `open` shows Powly's own dialog over the game (drawn by Powly, not the game) with their
+   * profile, where the player can add them as a friend, block or report them; with
+   * `{ view: "report" }` it opens straight on reporting them. Games can't file reports
+   * themselves: the player always confirms in Powly's dialog. Resolves when it closes, with
+   * whether the player has them blocked now (hide their chat, say). Fails for player IDs that
+   * aren't from this game.
+   */
+  players: {
+    open(playerId: string, options?: { view?: PlayerView }): Promise<PlayersOpenResult>;
   };
   /** Realtime rooms (parties) with other players of this game. */
   rooms: RoomsApi;
@@ -283,7 +300,10 @@ function createSession(port: MessagePort, ready: ReadyMessage): PowlySession {
     }
   };
 
-  const call = (method: HostMethod, extra: Pick<RequestMessage, "params" | "members"> = {}) =>
+  const call = (
+    method: HostMethod,
+    extra: Pick<RequestMessage, "params" | "members" | "playerId" | "view"> = {},
+  ) =>
     new Promise<unknown>((resolve, reject) => {
       const id = nextId++;
       pending.set(id, { resolve, reject });
@@ -344,7 +364,10 @@ function createSession(port: MessagePort, ready: ReadyMessage): PowlySession {
     invite: sendInvite,
   });
   listeners.get("ended")?.add(() => realtime.stop());
-  const twitch = createTwitch({ getInfo: () => api<TwitchInfo>("/twitch") });
+  const twitch = createTwitch({
+    getInfo: () => api<TwitchInfo>("/twitch"),
+    prompt: async () => ((await call("twitch.connect")) as TwitchConnectResult).connected,
+  });
   listeners.get("ended")?.add(() => twitch.stop());
 
   const saves: PowlySession["saves"] = {
@@ -391,6 +414,13 @@ function createSession(port: MessagePort, ready: ReadyMessage): PowlySession {
           room && params?.room === room.code ? room.members.map((member) => member.playerId) : [];
         return (await call("invites.open", { params, members })) as InvitesOpenResult;
       },
+    },
+    players: {
+      open: async (playerId, options = {}) =>
+        (await call("players.open", {
+          playerId,
+          ...(options.view && { view: options.view }),
+        })) as PlayersOpenResult,
     },
     rooms: realtime.rooms,
     twitch: {
@@ -452,8 +482,11 @@ function createSession(port: MessagePort, ready: ReadyMessage): PowlySession {
 const Powly = { init, SDK_VERSION, PowlyError };
 export default Powly;
 export type {
+  ConnectOptions,
   HostEventName,
   PlayerProfile,
+  PlayersOpenResult,
+  PlayerView,
   TwitchApi,
   TwitchChatMessage,
   TwitchChatState,

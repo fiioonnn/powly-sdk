@@ -10,6 +10,11 @@
 //     });
 //   }
 //
+// A game with a Twitch mode among others (Twitch chat "optional" in Studio) passes
+// `{ prompt: true }` when the player picks that mode: if they haven't connected Twitch, Powly asks
+// them to in its own dialog (drawn by Powly, outside the game), and `connect()` resolves once
+// they did or closed it.
+//
 // Chat is Twitch IRC over a WebSocket (https://dev.twitch.tv/docs/chat/irc/). The connection comes
 // back by itself when it drops, and stops when the launch ends.
 
@@ -64,14 +69,22 @@ type Events = {
   state: TwitchChatState;
 };
 
+export type ConnectOptions = {
+  /** Ask the player to connect Twitch in Powly's dialog when they haven't. Default false. */
+  prompt?: boolean;
+};
+
 export type TwitchApi = {
   /** The game's setting and the player's channel, without opening chat. */
   info(): Promise<TwitchInfo>;
   /**
    * Opens the player's chat when they have a channel to read (`status: "connected"`). Resolves
    * with the info, once chat is joined (or failed to; it keeps retrying in the background).
+   * `prompt`: when the player hasn't connected Twitch, Powly first asks them to in its own dialog
+   * (they can connect it there without leaving the game); `status` is still "not_connected" if
+   * they closed it.
    */
-  connect(): Promise<TwitchInfo>;
+  connect(options?: ConnectOptions): Promise<TwitchInfo>;
   /** Closes chat; `connect()` opens it again. */
   disconnect(): void;
   readonly state: TwitchChatState;
@@ -177,6 +190,8 @@ const SILENCE_MS = 6 * 60_000;
 
 export function createTwitch(options: {
   getInfo: () => Promise<TwitchInfo>;
+  /** Opens Powly's Connect Twitch dialog; resolves with whether Twitch is connected now. */
+  prompt?: () => Promise<boolean>;
   /** Twitch chat's WebSocket URL (tests point it elsewhere). */
   url?: string;
 }): TwitchApi & { stop(): void } {
@@ -328,8 +343,11 @@ export function createTwitch(options: {
 
   return {
     info: options.getInfo,
-    async connect() {
-      const info = await options.getInfo();
+    async connect(connectOptions = {}) {
+      let info = await options.getInfo();
+      if (info.status === "not_connected" && connectOptions.prompt && options.prompt) {
+        if (await options.prompt()) info = await options.getInfo();
+      }
       const next = info.status === "connected" ? info.channel : null;
       if (!next || stopped) {
         disconnect();

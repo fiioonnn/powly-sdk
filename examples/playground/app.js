@@ -162,6 +162,20 @@
                 { type: "button", class: "small", onclick: () => inviteFriend(friend) },
                 "invites.send()",
               ),
+              el(
+                "button",
+                { type: "button", class: "small ghost", onclick: () => openPlayer(friend) },
+                "players.open()",
+              ),
+              el(
+                "button",
+                {
+                  type: "button",
+                  class: "small ghost",
+                  onclick: () => openPlayer(friend, "report"),
+                },
+                "Report",
+              ),
             ),
           )
         : [empty("None of your friends play this game yet.")]),
@@ -175,6 +189,14 @@
       powly.invites.send(friend.playerId, params),
     );
     if (sent) await unlock("invite-friend");
+  }
+
+  /** Powly's own dialog with the player's profile (add, block, report), or straight the report. */
+  function openPlayer(friend, view) {
+    const call = view
+      ? `players.open("${friend.playerId}", { view: "${view}" })`
+      : `players.open("${friend.playerId}")`;
+    return run(call, () => powly.players.open(friend.playerId, view ? { view } : {}));
   }
 
   function inviteRow(invite, live) {
@@ -621,6 +643,9 @@
         return { status: response.status, type: blob.type, bytes: blob.size };
       });
     },
+    // A game's Twitch mode: Powly asks the player to connect Twitch when they haven't.
+    twitch: () =>
+      run("twitch.connect({ prompt: true })", () => powly.twitch.connect({ prompt: true })),
     friends: loadFriends,
     async invites() {
       const invites = await run("invites.list()", () => powly.invites.list());
